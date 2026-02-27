@@ -62,9 +62,10 @@ struct pga: G4VUserPrimaryGeneratorAction
 
 int main()
 {
+    G4RunManager *rm = new G4RunManager;
     rm->SetUserInitialization(new det_constr);
-    rm->Initialize(new FTFP_BERT);
-    G4RunManager *RM = new G4RunManager;
+    rm->SetUserInitialization(new FTFP_BERT);
+    rm->Initialize();
     G4UImanager *ui = G4UImanager::GetUIpointer ();
     ui->ApplyCommand("/control/execute vis.mac");
     return 0;    
