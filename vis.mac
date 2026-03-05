@@ -1,0 +1,10 @@
+/vis/open OGLSQt 1024x1024
+/vis/drawVolume
+/vis/scene/add/trajectories
+/vis/scene/endOfEventAction accumulate 1000
+/gun/particle proton
+/gun/energy 1 GeV
+/run/beamOn  100
+/vis/viewer/flush
+
+
