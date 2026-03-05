@@ -33,7 +33,7 @@ struct det_constr: G4VUserDetectorConstruction
         G4Box *world_box = new G4Box ("world_box", 500*mm, 500*mm, 500*mm);
         G4Material *water = G4NistManager::Instance()->FindOrBuildMaterial ("G4_WATER");
         G4LogicalVolume *world_logical_volume = new G4LogicalVolume (world_box, water, "world_logical_vol");
-        G4VPhysicalVolume *world_physical_volume = new G4PVPlacement (NULL, G4ThreeVector(), world_logical_volume, "world_physical_vol", NULL, false, NULL);
+        G4VPhysicalVolume *world_physical_volume = new G4PVPlacement (0, G4ThreeVector(), world_logical_volume, "world_physical_vol", 0, false, 0);
         return world_physical_volume;
     }
 };
@@ -60,13 +60,24 @@ struct pga: G4VUserPrimaryGeneratorAction
 };
 
 
-int main()
+int main(int argc, char *argv [])
 {
     G4RunManager *rm = new G4RunManager;
     rm->SetUserInitialization(new det_constr);
     rm->SetUserInitialization(new FTFP_BERT);
+    rm->SetUserAction (new pga);
     rm->Initialize();
+
     G4UImanager *ui = G4UImanager::GetUIpointer ();
-    ui->ApplyCommand("/control/execute vis.mac");
+
+    G4VisManager *vm = new G4VisExecutive;
+  vm->Initialize ();
+
+  G4UIExecutive *uie = new G4UIExecutive (argc, argv);
+
+  ui->ApplyCommand ("/control/execute vis.mac");
+  uie->SessionStart ();
+
+  delete rm;
     return 0;    
 }
