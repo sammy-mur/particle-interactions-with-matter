@@ -21,6 +21,7 @@
 #include <G4RandomDirection.hh>
 #include <TFile.h>
 #include <TNtuple.h>
+#include "Randomize.hh"
 using namespace std;
 using CLHEP::MeV;
 using CLHEP::cm;
@@ -30,12 +31,12 @@ using CLHEP::degree;
 class sensitive_detector : public G4VSensitiveDetector
 {
 private:
-  double edep;
+  double edep, length;
   TNtuple* ntuple; 
 public:
   sensitive_detector (G4String name) : G4VSensitiveDetector (name)
   {
-    ntuple = new TNtuple("hits", "detector hits", "edep");
+    ntuple = new TNtuple("hits", "detector hits", "energy:edep:length:dedx");
   }
 
    virtual ~sensitive_detector() {
@@ -48,24 +49,33 @@ public:
   virtual void Initialize (G4HCofThisEvent*)
   {
     edep = 0.0;
+    length = 0.0;
   }
 
   G4bool ProcessHits (G4Step *step, G4TouchableHistory*)
   {
     edep += step->GetTotalEnergyDeposit ();
+    length += step->GetStepLength();
     return true;
   }
   
   virtual void EndOfEvent (G4HCofThisEvent*)
   {
     int e = G4RunManager::GetRunManager ()->GetCurrentEvent ()->GetEventID ();
-    if (edep > 0)
-      {
-        G4cout << ">>> event " << e
-               << " energy deposition " << edep / MeV << " MeV"
-               << endl;
-        ntuple->Fill(edep / MeV);
-      }
+    const G4Event* ev = G4RunManager::GetRunManager()->GetCurrentEvent();
+    G4PrimaryVertex* pv = ev->GetPrimaryVertex();
+    G4PrimaryParticle* pp = pv->GetPrimary();
+    G4double ekin = pp->GetKineticEnergy();
+    if (edep > 0 && length > 0) {
+      double dedx = edep / length;     // МэВ/мм
+      G4cout << ">>> event " << e
+             << " energy=" << ekin/MeV << " MeV"
+             << " edep=" << edep/MeV << " MeV"
+             << " length=" << length/mm << " mm"
+             << " dE/dx=" << dedx/(MeV/mm) * 10 << " MeV/mm"
+             << G4endl;
+      ntuple->Fill(ekin/MeV, edep/MeV, length/mm, dedx/(MeV/mm)); 
+    }
   }
 };
  
@@ -84,7 +94,7 @@ struct det_constr: G4VUserDetectorConstruction
         sensitive_detector *detector = new sensitive_detector ("detector");
         G4SDManager::GetSDMpointer ()->AddNewDetector (detector);
         world_logical_volume->SetSensitiveDetector (detector);
-        
+
         return world_physical_volume;
     }
 };
@@ -105,6 +115,8 @@ struct pga: G4VUserPrimaryGeneratorAction
 
     void GeneratePrimaries(G4Event *event)
     {
+        G4double energy = G4UniformRand() * (10000*MeV - 1*MeV) + 1*MeV;
+        this->particle_gun->SetParticleEnergy(energy);
         this->particle_gun->GeneratePrimaryVertex(event);
     }
 
