@@ -2,7 +2,7 @@
 /vis/drawVolume
 /vis/scene/add/trajectories
 /vis/scene/endOfEventAction accumulate 1000
-/gun/particle mu+
+/gun/particle mu-
 /gun/energy 1 GeV
 /run/beamOn  1000
 /vis/viewer/flush
