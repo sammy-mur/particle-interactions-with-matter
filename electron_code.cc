@@ -24,10 +24,10 @@ using CLHEP::cm, CLHEP::MeV, CLHEP::mm;
 class sensitive_detector : public G4VSensitiveDetector
 {
 private:
-    double e_entry; // энергия при входе (МэВ)
-    double e_exit;  // энергия при выходе (МэВ)
-    double path;    // путь внутри детектора (мм)
-    bool inside;    // флаг нахождения внутри
+    double e_entry;
+    double e_exit;
+    double path;
+    bool inside;
     TNtuple *ntuple;
 
 public:
@@ -63,22 +63,18 @@ public:
         G4StepPoint *pre = step->GetPreStepPoint();
         G4StepPoint *post = step->GetPostStepPoint();
 
-        // Вход в детектор (ещё не внутри, и текущая точка – внутри чувствительного объёма)
         if (!inside && pre->GetPhysicalVolume()->GetLogicalVolume()->GetSensitiveDetector() == this)
         {
             inside = true;
             e_entry = pre->GetKineticEnergy();
         }
-
-        // Если внутри, накапливаем длину шага
         if (inside)
             path += step->GetStepLength();
 
-        // Выход из детектора (были внутри и следующий шаг вне чувствительного объёма)
         if (inside && post->GetPhysicalVolume()->GetLogicalVolume()->GetSensitiveDetector() != this)
         {
             e_exit = post->GetKineticEnergy();
-            double dEdx = (e_entry - e_exit) / path; // МэВ/мм
+            double dEdx = (e_entry - e_exit) / path;
             ntuple->Fill(e_entry / MeV, e_exit / MeV, dEdx / (MeV / cm), path / cm);
             inside = false;
         }
@@ -86,13 +82,12 @@ public:
     }
 };
 
-// ----------------- Геометрия с вашими размерами -----------------
 struct det_constr : G4VUserDetectorConstruction
 {
     G4VPhysicalVolume *Construct() override
     {
-        // Мир – вакуум (Galactic), размером чуть больше слоя
-        G4Box *world_box = new G4Box("world", 200 * cm, 200 * cm, 200 * cm);
+
+        G4Box *world_box = new G4Box("world", 100 * cm, 100 * cm, 100 * cm);
         G4Material *vacuum = G4NistManager::Instance()->FindOrBuildMaterial("G4_Galactic");
         G4LogicalVolume *world_log = new G4LogicalVolume(world_box, vacuum, "world_log");
         G4VPhysicalVolume *world_phys = new G4PVPlacement(0, G4ThreeVector(), world_log, "world", 0, false, 0);
@@ -111,7 +106,6 @@ struct det_constr : G4VUserDetectorConstruction
     }
 };
 
-// ----------------- Генератор частиц (электроны 250 МэВ, летят вдоль Z) -----------------
 struct pga : G4VUserPrimaryGeneratorAction
 {
     G4ParticleGun *gun;
@@ -121,9 +115,6 @@ struct pga : G4VUserPrimaryGeneratorAction
         G4ParticleDefinition *electron = G4ParticleTable::GetParticleTable()->FindParticle("e-");
         gun->SetParticleDefinition(electron);
         gun->SetParticleEnergy(250 * MeV);
-        // Стартуем перед слоем: Z = -150 см (слой занимает Z от -100 до +100 см)
-        gun->SetParticlePosition(G4ThreeVector(0, 0, -150 * cm));
-        gun->SetParticleMomentumDirection(G4ThreeVector(0, 0, 1)); // вдоль +Z
     }
     ~pga() { delete gun; }
     void GeneratePrimaries(G4Event *event) override
@@ -155,22 +146,41 @@ int main(int argc, char *argv[])
     file->Close();
     delete file;
 
-    // Анализ: гистограмма dE/dx
     TFile *f = TFile::Open("filename.root");
     if (f && !f->IsZombie())
     {
         TNtuple *nt = (TNtuple *)f->Get("hits");
         if (nt)
         {
-            // Гистограмма dE/dx (в МэВ/мм)
+
             TH1F *h_dEdx = new TH1F("h_dEdx", "dE/dx for 250 MeV e- in Ar;dE/dx (MeV/cm);Events",
-                                    100, 0, 0.5); // диапазон подберите по данным
+                                    100, 0, 0.014);
             nt->Draw("dEdx>>h_dEdx");
 
-            // Рисуем и сохраняем
+            double mean = h_dEdx->GetMean();
+            cout << "Mean energy loss = " << mean * 1000 << " keV" << endl;
+            // TF1 *new_graph = new TF1("new_graph", "new_graph", 0, 30);
+            // new_graph->SetParameters(h_dEdx->Integral(), mean, 1.0);
+
             TCanvas *c = new TCanvas("c", "dE/dx distribution", 800, 600);
             h_dEdx->Draw();
             c->SaveAs("dEdx_hist.png");
+
+            double E = 250.0;
+            double m_e = 0.511;
+            double gamma = 1 + E / m_e;
+            double beta2 = 1 - 1 / (gamma * gamma);
+            // double beta = sqrt(beta2);
+            double I = 188.0e-6;
+            double K = 0.307;
+            double Z = 18.0, A = 39.95;
+            double C = K * Z / A;
+            double rho = 1.782e-3;
+
+            double dedx_theory = C / beta2 * (0.5 * log(2 * m_e * beta2 * gamma * gamma / I) - beta2);
+            dedx_theory *= rho;
+
+            cout << "Theoretical dE/dx (Bethe-Bloch) = " << dedx_theory << " MeV/cm" << endl;
 
             delete c;
             delete h_dEdx;
@@ -180,3 +190,7 @@ int main(int argc, char *argv[])
 
     return 0;
 }
+
+// h_dEdx->Fit("new_graph", "R");
+// double mpv = new_graph->GetParameter(1);
+// cout << "Most Probable energy loss = " << mpv << endl;
